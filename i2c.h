@@ -29,6 +29,11 @@
 #define I2C_GC_RESET 0
 #define I2C_TIMEOUT 0xff
 
+// object errors
+#define I2C_ERR_BUS 0 //! Bus error.
+#define I2C_ERR_NOTFOUND 1 //! Device not found.
+#define I2C_ERR_DATA 2 //! Data error.
+
 class I2C {
 	private:
 		// I2C bus should be initialized only once
@@ -41,7 +46,8 @@ class I2C {
 		I2C(uint8_t); // set the device address
 		static void Init(); // Initialize bus
 		static void Shut(); // De-initialize bus
-		static uint8_t BusError() { return(Bus_status); };
+		static uint8_t BusError() { return(Bus_status); }; //! \deprecated
+		static uint8_t BusStatus() { return(Bus_status); }; //! Global I2C bus
 		uint8_t error() { return(error_); };
 		void tx(const uint16_t, uint8_t*, bool = true);
 		void rx(const uint16_t, uint8_t*, bool = true);
