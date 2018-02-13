@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Enrico Rossi
+/* Copyright (C) 2017, 2018 Enrico Rossi
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -29,8 +29,8 @@
 #define NACK 6
 
 // Static initializations
-bool I2C::Initialized {false};
-uint8_t I2C::Bus_status {0};
+bool I2C::Initialized {false}; //! I2C bus not yet initialized.
+uint8_t I2C::Bus_status {0}; //! Clear the bus status.
 
 /*! Initialize the i2c bus.
  *
@@ -74,8 +74,12 @@ void I2C::Shut()
 	I2C::Initialized = false;
 }
 
-// Contructor
-// C++11 set the const addr to address.
+/*! Contructor
+ *
+ * Initialize the bus if not done already.
+ *
+ * \note C++11 set the const addr to address.
+ */
 I2C::I2C(uint8_t addr) : address{addr}
 {
 	if (!I2C::Initialized)
@@ -128,6 +132,7 @@ void I2C::send(const uint8_t code, const uint8_t data)
  * \param stop send the stop at the end of the communication
  * default to TRUE.
  *
+ * \bug missing error handling.
  */
 void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
 {
@@ -174,6 +179,7 @@ void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
  * \param stop send the stop at the end of the communication
  * default to TRUE.
  *
+ * \missing error handling.
  */
 void I2C::rx(const uint16_t lenght, uint8_t *data, bool stop)
 {
