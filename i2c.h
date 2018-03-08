@@ -37,15 +37,16 @@
 class I2C {
 	private:
 		// I2C bus should be initialized only once
-		static bool Initialized; // class vars cannot be initialized here
-		static uint8_t Bus_status; //! Global Bus error common to all devices.
+		static uint8_t Registered; //! \brief Devices registered on the bus
+		static uint8_t Bus_status; //! \biref Global Bus error common to all devices.
 		uint8_t error_; //! Local error to a single device.
 		const uint8_t address; // device's address
 		static void send(const uint8_t, const uint8_t);
-	public:
-		I2C(uint8_t); // set the device address
 		static void Init(); // Initialize bus
 		static void Shut(); // De-initialize bus
+	public:
+		I2C(uint8_t); //! \brief Register a device with i2c address.
+		~I2C(); //! \brief de-register a device.
 		static uint8_t BusError() { return(Bus_status); }; //! \deprecated
 		static uint8_t BusStatus() { return(Bus_status); }; //! Global I2C bus
 		uint8_t error() { return(error_); };

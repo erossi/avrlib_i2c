@@ -29,12 +29,15 @@
 #define NACK 6
 
 // Static initializations
-bool I2C::Initialized {false}; //! I2C bus not yet initialized.
+bool I2C::Registered {0}; //! I2C bus not yet initialized.
 uint8_t I2C::Bus_status {0}; //! Clear the bus status.
 
 /*! Initialize the i2c bus.
  *
- * See the datasheet for SCL speed.
+ * Setup the bus speed, depends on the hardware
+ * implementation, mcu and clock speed.
+ *
+ * For info on theese setup check the datasheet.
  * Prescaler value (1, 4, 16, 64)
  *
  * SCL freq = CPU FREQ / (16 + 2 * TWBR * Prescaler)
@@ -61,8 +64,6 @@ void I2C::Init()
 #else
 #error I2C clock rate unsupported
 #endif
-
-	I2C::Initialized = true;
 }
 
 /*! Shutdown the i2c bus.
@@ -71,24 +72,45 @@ void I2C::Shut()
 {
 	TWSR = 0;
 	TWBR = 0;
-	I2C::Initialized = false;
 }
 
-/*! Contructor
+/*! Add a device to the bus.
  *
- * Initialize the bus if not done already.
+ * Check if the bus has not been initialized yet
+ * and do it.
  *
  * \note C++11 set the const addr to address.
  */
 I2C::I2C(uint8_t addr) : address{addr}
 {
-	if (!I2C::Initialized)
+	if (!I2C::Registered)
 		I2C::Init();
+
+	I2C::Registered++; // Add the device
+}
+
+/*! Remove a device from the bus.
+ *
+ * If the device is the last registered on the bus, shut
+ * down the I2C bus.
+ */
+I2C::~I2C()
+{
+	// Remove the device
+	I2C::Registered--;
+
+	// shut down the bus if not in use.
+	if (!I2C::Registered)
+		I2C::Shut();
 }
 
 /*! Perform an i2c operation.
  *
- * \return the i2c status register properly masked.
+ * Send on the I2C bus the required operation like Start,
+ * Stop etc. Set the I2C bus error status.
+ *
+ * \param code I2C operation do be performed.
+ * \param data data to be sent.
  */
 void I2C::send(const uint8_t code, const uint8_t data)
 {
@@ -123,7 +145,7 @@ void I2C::send(const uint8_t code, const uint8_t data)
 	I2C::Bus_status = TW_STATUS;
 }
 
-/*! i2c Master Trasmit.
+/*! Master Trasmit.
  *
  * \param lenght the number of byte to send or
  * the max lenght the number of byte to receive.
@@ -172,7 +194,7 @@ void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
 		send(STOP, 0);
 }
 
-/*! i2c Master Receive.
+/*! Master Receive.
  *
  * \param lenght the number of byte to send or
  * the max lenght the number of byte to receive.
