@@ -29,7 +29,7 @@
 #define NACK 6
 
 // Static initializations
-bool I2C::Registered {0}; //! I2C bus not yet initialized.
+uint8_t I2C::Registered {0}; //! I2C bus not yet initialized.
 uint8_t I2C::Bus_status {0}; //! Clear the bus status.
 
 /*! Initialize the i2c bus.
