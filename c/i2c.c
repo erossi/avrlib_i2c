@@ -62,6 +62,8 @@ void i2c_init(void)
 #else
 #error I2C clock rate unsupported
 #endif
+
+	i2c_Bus_status = 0; // initialize the bus status.
 }
 
 /*! Shutdown the i2c bus.
@@ -74,12 +76,11 @@ void i2c_shut(void)
 
 /*! Perform an i2c operation.
  *
- * \return the i2c status register properly masked.
  */
-uint8_t i2c_send(const uint8_t code, const uint8_t data)
+void i2c_send(const uint8_t code, const uint8_t data)
 {
 	switch (code) {
-		/* valid also as restart */
+		/* valid also as RESTART */
 		case START:
 			TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);
 			loop_until_bit_is_set(TWCR, TWINT);
@@ -106,60 +107,120 @@ uint8_t i2c_send(const uint8_t code, const uint8_t data)
 			break;
 	}
 
-	return(TW_STATUS);
+	i2c_Bus_status = TW_STATUS;
 }
 
 /*! i2c Master Trasmitter Mode.
+ *
+ * Send the data to I2C client, following the diagram in
+ * the datasheet.
+ * To send a write command (ex. to load a register), then a read
+ * to get the result use:
+ *
+ * i2c_mtm(a, 1, d, FALSE);
+ * i2c_mrm(a, 1, d, TRUE);
+ *
+ * on the MRM the start will be considered a REP-START and should
+ * generate a TW_REP_START as a result.
+ *
+ * Case not managed:
+ *   - multi-master
+ *   - TW_MT_SLA_NACK with sending data anyway.
+ *
+ * \note: Re-start is equal to start, but with a different
+ * TW_results.
  *
  * \param addr the i2c slave address.
  * \param lenght the number of byte to send.
  * \param *data the pointer to the block of byte.
  * \param stop the stop at the end of the communication.
- *
+ * \return TRUE: error, FALSE: ok.
  */
 uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
 	uint16_t i;
-	uint8_t err;
+	uint8_t run; // boolean
 
-	/* START */
-	err = i2c_send(START, 0);
+	i = 0;
+	run = TRUE;
 
-	// if start has been sent properly
-	if ((err == TW_START) || (err == TW_REP_START))
-		/* Send address */
-		err = i2c_send(SLA, addr);
+	/* Send the start.
+	 * Results:
+	 * TW_START
+	 * TW_REP_START in case this was a restart.
+	 */
+	i2c_send(START, 0);
 
-	/* if the address is ACK */
-	if (err == TW_MT_SLA_ACK)
-		/* send data */
-		for (i=0; i<lenght; i++) {
-			err = i2c_send(DATA, *(data+i));
+	do {
+		switch (i2c_Bus_status) {
+			case TW_START:
+			case TW_REP_START:
+				/* Send address.
+				 * Results:
+				 * TW_MT_SLA_ACK,
+				 * TW_MT_SLA_NACK,
+				 * TW_MR_ARB_LOST,
+				 * TW_SR_ARB_LOST_SLA_ACK,
+				 * TW_SR_ARB_LOST_GCALL_ACK,
+				 * TW_ST_ARB_LOST_SLA_ACK
+				 */
+				i2c_send(SLA, addr);
+				break;
 
-			/* if data is not ACK */
-			if (err != TW_MT_DATA_ACK)
+				/* note that the implementation
+				 * of the TW_MT_SLA_ACK is the
+				 * same of TW_MT_DATA_ACK.
+				 * Removed duplication of code.
+				 */
+			case TW_MT_SLA_ACK:
+			case TW_MT_DATA_ACK:
+				/* send data if present (should be).
+				 * Results:
+				 * TW_MT_DATA_ACK
+				 * TW_MT_DATA_NACK
+				 */
+				if (i < lenght) {
+					i2c_send(DATA, *(data+i));
+					i++;
+				} else {
+					run = FALSE;
+				}
+
+				break;
+
+			case TW_MT_SLA_NACK:
+			case TW_MT_DATA_NACK:
 				/* exit */
-				i=lenght;
+				run = FALSE;
+				break;
+			default:
+				/* unmanaged situation,
+				 * send STOP and exit:
+				 * Apply to:
+				 * TW_BUS_ERROR (0x00)
+				 */
+				run = FALSE;
 		}
-
-	/* if client NACK on ADDR or DATA */
-	if ((err == TW_MT_SLA_NACK) || (err == TW_MT_DATA_NACK))
-		/* send the stop */
-		stop = TRUE;
-
-	/* if data is ACK */
-	if (err == TW_MT_DATA_ACK)
-		err = 0;
+	} while (run);
 
 	/* send the STOP if required */
 	if (stop)
 		i2c_send(STOP, 0);
 
-	return(err);
+	/* if everything is ok, assuming the only two
+	 * conditions are the ACK results.
+	 */
+	if ((i2c_Bus_status == TW_MT_SLA_ACK) ||
+			(i2c_Bus_status == TW_MT_DATA_ACK))
+		return(FALSE); // ok
+	else
+		return(TRUE);
 }
 
 /*! i2c Master Receiver Mode.
+ *
+ * \see i2c_mtm
  *
  * \param addr the i2c slave address.
  * \param the max lenght the number of byte to receive.
@@ -171,55 +232,99 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
 	uint16_t i;
-	uint8_t err;
+	uint8_t run; // boolean
 
-	/* START */
-	err = i2c_send(START, 0);
+	i = 0;
+	run = TRUE;
 
-	// if start has been sent properly
-	if ((err == TW_START) || (err == TW_REP_START))
-		/* Send address */
-		err = i2c_send(SLA, addr);
+	/* Send the start.
+	 * Results:
+	 * TW_START
+	 * TW_REP_START in case this was a restart.
+	 */
+	i2c_send(START, 0);
 
-	/* if the address is ACK */
-	if (err == TW_MR_SLA_ACK)
-		/* Receive data */
-		for (i=0; i<lenght; i++) {
-			// Trigger the RX by sending ACK or NACK,
-			// if this is the last byte send NACK after it
-			// or send ACK.
-			if (i == (lenght - 1))
-				err = i2c_send(NACK, 0);
-			else
-				err = i2c_send(ACK, 0);
+	do {
+		switch (i2c_Bus_status) {
+			case TW_START:
+			case TW_REP_START:
+				/* Send address + R.
+				 * Results:
+				 * TW_MR_SLA_ACK
+				 * TW_MR_SLA_NACK
+				 * TW_MT_ARB_LOST
+				 * TW_SR_ARB_LOST_SLA_ACK
+				 * TW_SR_ARB_LOST_GCALL_ACK
+				 * TW_ST_ARB_LOST_SLA_ACK
+				 */
+				i2c_send(SLA, (addr | TW_READ));
+				break;
 
-			// Read the byte
-			*(data+i) = TWDR;
+			case TW_MR_SLA_ACK:
+			case TW_MR_DATA_ACK:
+				/* Receive data.
+				 *
+				 * data reception is triggered by sending
+				 * an ACK or NACK, depending if this is the
+				 * last byte to be received or not.
+				 *
+				 * Results generated by us:
+				 * TW_MR_DATA_ACK
+				 * TW_MR_DATA_NACK
+				 */
+				if (i < lenght) {
+					if (i < (lenght - 1))
+						/* status should remain
+						 * TW_MR_DATA_ACK
+						 */
+						i2c_send(ACK, 0);
+					else
+						/* status should become
+						 * TW_MR_DATA_NACK.
+						 */
+						i2c_send(NACK, 0);
 
-			/* if data is not ACK */
-			if (err != TW_MR_DATA_ACK)
-				i = lenght;
+					// Read the byte
+					*(data+i) = TWDR;
+					i++;
+				} else {
+					/* this should not be reached
+					 * if the last NACK set the
+					 * status to TW_MR_DATA_NACK.
+					 */
+					run = FALSE;
+				}
+
+				break;
+
+			case TW_MR_SLA_NACK:
+			case TW_MR_DATA_NACK:
+				/* exit */
+				run = FALSE;
+				break;
+
+			default:
+				/* unmanaged situation,
+				 * send STOP and exit:
+				 * Apply to:
+				 * TW_BUS_ERROR (0x00)
+				 */
+				run = FALSE;
 		}
-
-	/* Error NACK on ADDR-R or Last DATA */
-	if ((err == TW_MR_SLA_NACK) || (err == TW_MR_DATA_NACK))
-		/* send the stop */
-		stop = TRUE;
-
-	if (err == TW_MR_DATA_ACK) {
-		/* last byte, send NACK */
-		err = i2c_send(NACK, 0);
-
-		/* if data is NACK */
-		if (err == TW_MR_DATA_NACK)
-			err = 0;
-	}
+	} while (run);
 
 	/* send the STOP if required */
 	if (stop)
 		i2c_send(STOP, 0);
 
-	return(err);
+	/* if everything is ok, assuming the only two
+	 * conditions are the ACK results.
+	 */
+	if ((i2c_Bus_status == TW_MR_SLA_NACK)
+			|| (i2c_Bus_status == TW_MR_DATA_NACK))
+		return(FALSE); // ok
+	else
+		return(TRUE);
 }
 
 /*! I2C General Call

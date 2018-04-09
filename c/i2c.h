@@ -35,7 +35,9 @@
 #define FALSE 0
 #endif
 
-uint8_t i2c_send(const uint8_t code, const uint8_t data);
+/* global I2C bus status */
+uint8_t i2c_Bus_status;
+
 void i2c_init(void);
 void i2c_shut(void);
 uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
