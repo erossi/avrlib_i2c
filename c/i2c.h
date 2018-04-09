@@ -44,7 +44,6 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, const uint8_t stop);
 uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, const uint8_t stop);
-uint8_t i2c_gc(const uint8_t call);
 
 #ifdef I2C_LEGACY_MODE
 uint8_t i2c_master_send_b(const uint8_t addr, const uint8_t data,

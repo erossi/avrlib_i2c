@@ -127,8 +127,14 @@ void i2c_send(const uint8_t code, const uint8_t data)
  *   - multi-master
  *   - TW_MT_SLA_NACK with sending data anyway.
  *
+ * Successful result is considered only those which results with
+ * SLA_ACK or DATA_ACK.
+ *
  * \note: Re-start is equal to start, but with a different
  * TW_results.
+ *
+ * \warning in case of NACK, if stop was not forseen,
+ * the NO stop is generated.
  *
  * \param addr the i2c slave address.
  * \param lenght the number of byte to send.
@@ -191,15 +197,22 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 
 			case TW_MT_SLA_NACK:
 			case TW_MT_DATA_NACK:
-				/* exit */
-				run = FALSE;
-				break;
+				/* exit.
+				 * by forcing a STOP, a RE-START
+				 * from error conditions cannot be
+				 * performed. If a device generate
+				 * a NACK to indicate wait and it
+				 * need a restart sequence this part of
+				 * the code need to be changed.
+				 */
+				/* code de-duplication */
 			default:
 				/* unmanaged situation,
 				 * send STOP and exit:
 				 * Apply to:
 				 * TW_BUS_ERROR (0x00)
 				 */
+				stop = TRUE;
 				run = FALSE;
 		}
 	} while (run);
@@ -297,18 +310,24 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 
 				break;
 
-			case TW_MR_SLA_NACK:
 			case TW_MR_DATA_NACK:
 				/* exit */
 				run = FALSE;
 				break;
 
+			case TW_MR_SLA_NACK:
+				/* force exit without managing
+				 * a re-start condition.
+				 * see MT_SLA_NACK.
+				 */
+				/* code de-duplication */
 			default:
 				/* unmanaged situation,
 				 * send STOP and exit:
 				 * Apply to:
 				 * TW_BUS_ERROR (0x00)
 				 */
+				stop = TRUE;
 				run = FALSE;
 		}
 	} while (run);
@@ -317,9 +336,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 	if (stop)
 		i2c_send(STOP, 0);
 
-	/* if everything is ok, assuming the only two
-	 * conditions are the ACK results.
-	 */
+	/* if everything is ok */
 	if ((i2c_Bus_status == TW_MR_SLA_NACK)
 			|| (i2c_Bus_status == TW_MR_DATA_NACK))
 		return(FALSE); // ok
@@ -327,50 +344,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 		return(TRUE);
 }
 
-/*! I2C General Call
- *
- * ex. i2c_gc(I2C_GC_RESET);
- */
-uint8_t i2c_gc(const uint8_t call)
-{
-	uint8_t i, err;
-	err = 0;
-
-	switch(call) {
-		case I2C_GC_RESET:
-		default:
-			/* Send the General Call reset */
-			i = 0x06;
-			err = i2c_mtm(0, 1, &i, TRUE);
-	}
-
-	return(err);
-}
-
 #ifdef I2C_LEGACY_MODE
-/*! i2c Master Trasmitter/Receive Mode.
- *
- * Dependent on the LSB of the address perform both
- * the mtm/mrm functions.
- *
- * \param addr the i2c slave address.
- * \param lenght the number of byte to send or
- * the max lenght the number of byte to receive.
- *
- * \param *data the pointer to the block of byte.
- * \param stop the stop at the end of the communication.
- *
- */
-uint8_t i2c_mXm(const uint8_t addr, const uint16_t lenght,
-		uint8_t *data, uint8_t stop)
-{
-	/* if read operation */
-	if (addr & TW_READ)
-		return(i2c_mrm(addr, lenght, data, stop));
-	else
-		return(i2c_mtm(addr, lenght, data, stop));
-}
-
 /*! Legacy master Send a byte.
  *
  * \param addr address of the slave.
@@ -395,12 +369,11 @@ uint8_t i2c_master_send_b(const uint8_t addr, const uint8_t data,
 uint8_t i2c_master_send_w(const uint8_t addr, const uint8_t msb,
 		const uint8_t lsb)
 {
-	uint8_t err;
 	uint16_t data;
 
 	data = (msb << 8) | lsb;
-	err = i2c_mtm(addr, 2, (uint8_t *) &data, TRUE);
-	return(err);
+
+	return(i2c_mtm(addr, 2, (uint8_t *) &data, TRUE));
 }
 
 /*! Legacy Master Read a byte.
