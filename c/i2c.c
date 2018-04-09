@@ -77,6 +77,11 @@ void i2c_shut(void)
 
 /*! Perform an i2c operation.
  *
+ * Send on the I2C bus the required operation like Start,
+ * Stop etc. Set the I2C bus error status.
+ *
+ * \param code I2C operation do be performed.
+ * \param data data to be sent.
  */
 void i2c_send(const uint8_t code, const uint8_t data)
 {

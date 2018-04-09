@@ -120,7 +120,7 @@ I2C::~I2C()
 void I2C::send(const uint8_t code, const uint8_t data)
 {
 	switch (code) {
-		/* valid also as restart */
+		/* valid also as RESTART */
 		case START:
 			TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);
 			loop_until_bit_is_set(TWCR, TWINT);
@@ -132,7 +132,7 @@ void I2C::send(const uint8_t code, const uint8_t data)
 		case DATA:
 			TWDR = data;
 			/* clear interrupt to start transmission */
-			TWCR = _BV(TWINT) | _BV(TWEN); 
+			TWCR = _BV(TWINT) | _BV(TWEN);
 			loop_until_bit_is_set(TWCR, TWINT);
 			break;
 		case ACK:
@@ -150,11 +150,34 @@ void I2C::send(const uint8_t code, const uint8_t data)
 	I2C::Bus_status = TW_STATUS;
 }
 
-/*! Master Trasmit.
+/*! i2c Master Trasmitter Mode.
  *
- * \param lenght the number of byte to send or
- * the max lenght the number of byte to receive.
+ * Send the data to I2C client, following the diagram in
+ * the datasheet.
+ * To send a write command (ex. to load a register), then a read
+ * to get the result use:
  *
+ * i2c_mtm(a, 1, d, FALSE);
+ * i2c_mrm(a, 1, d, TRUE);
+ *
+ * on the MRM the start will be considered a REP-START and should
+ * generate a TW_REP_START as a result.
+ *
+ * Case not managed:
+ *   - multi-master
+ *   - TW_MT_SLA_NACK with sending data anyway.
+ *
+ * Successful result is considered only those which results with
+ * SLA_ACK or DATA_ACK.
+ *
+ * \note: Re-start is equal to start, but with a different
+ * TW_results.
+ *
+ * \warning in case of NACK, if stop was not forseen,
+ * the NO stop is generated.
+ *
+ * \param addr the i2c slave address.
+ * \param lenght the number of byte to send.
  * \param *data the pointer to the block of byte.
  * \param stop send the stop at the end of the communication
  * default to TRUE.
@@ -199,10 +222,9 @@ void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
 		send(STOP, 0);
 }
 
-/*! Master Receive.
+/*! i2c Master Receiver Mode.
  *
- * \param lenght the number of byte to send or
- * the max lenght the number of byte to receive.
+ * \see i2c_mtm
  *
  * \param *data the pointer to the block of byte.
  * \param stop send the stop at the end of the communication
