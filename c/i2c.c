@@ -1,4 +1,4 @@
-/* Copyright (C) 2011-2016 Enrico Rossi
+/* Copyright (C) 2011-2018 Enrico Rossi
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -20,50 +20,13 @@
 #include <avr/io.h>
 #include "i2c.h"
 
-/* defines */
+// local defines
 #define START 1
 #define STOP 2
 #define SLA 3
 #define DATA 4
 #define ACK 5
 #define NACK 6
-
-/*! Perform an i2c operation.
- *
- * \return the i2c status register properly masked.
- */
-uint8_t i2c_send(const uint8_t code, const uint8_t data)
-{
-	switch (code) {
-		/* valid also as restart */
-		case START:
-			TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);
-			loop_until_bit_is_set(TWCR, TWINT);
-			break;
-		case STOP:
-			TWCR = _BV(TWINT) | _BV(TWSTO) | _BV(TWEN);
-			break;
-		case SLA:
-		case DATA:
-			TWDR = data;
-			/* clear interrupt to start transmission */
-			TWCR = _BV(TWINT) | _BV(TWEN); 
-			loop_until_bit_is_set(TWCR, TWINT);
-			break;
-		case ACK:
-			TWCR = _BV(TWINT) | _BV(TWEN) | _BV(TWEA);
-			loop_until_bit_is_set(TWCR, TWINT);
-			break;
-		case NACK:
-			TWCR = _BV(TWINT) | _BV(TWEN);
-			loop_until_bit_is_set(TWCR, TWINT);
-			break;
-		default:
-			break;
-	}
-
-	return(TW_STATUS);
-}
 
 /*! Initialize the i2c bus.
  *
@@ -109,95 +72,44 @@ void i2c_shut(void)
 	TWBR = 0;
 }
 
-/*! i2c Master Trasmitter/Receive Mode.
+/*! Perform an i2c operation.
  *
- * Dependent on the LSB of the address perform both
- * the mtm/mrm functions.
- *
- * \param addr the i2c slave address.
- * \param lenght the number of byte to send or
- * the max lenght the number of byte to receive.
- *
- * \param *data the pointer to the block of byte.
- * \param stop the stop at the end of the communication.
- *
+ * \return the i2c status register properly masked.
  */
-uint8_t i2c_mXm(const uint8_t addr, const uint16_t lenght,
-		uint8_t *data, uint8_t stop)
+uint8_t i2c_send(const uint8_t code, const uint8_t data)
 {
-	uint16_t i;
-	uint8_t err;
-
-	/* START */
-	err = i2c_send(START, 0);
-
-	/* if start acknoledge */
-	if ((err == TW_START) || (err == TW_REP_START))
-		/* Send address */
-		err = i2c_send(SLA, addr);
-
-	/* if read operation */
-	if (addr & TW_READ) {
-		/* if the address is ACK */
-		if (err == TW_MR_SLA_ACK)
-			/* Receive data */
-			for (i=0; i<lenght; i++) {
-				/* send ACK */
-				err = i2c_send(ACK, 0);
-
-				/* if data is not ACK */
-				if (err == TW_MR_DATA_ACK)
-					*(data+i) = TWDR;
-				else
-					i = lenght;
-			}
-
-		/* Error NACK on ADDR-R or Last DATA */
-		if ((err == TW_MR_SLA_NACK) || (err == TW_MR_DATA_NACK))
-			/* send the stop */
-			stop = TRUE;
-
-		if (err == TW_MR_DATA_ACK) {
-			/* last byte, send NACK */
-			err = i2c_send(NACK, 0);
-
-			/* if data is NACK */
-			if (err == TW_MR_DATA_NACK)
-				err = 0;
-		}
-	} else {
-		/* if the address is ACK */
-		if (err == TW_MT_SLA_ACK)
-			/* send data */
-			for (i=0; i<lenght; i++) {
-				err = i2c_send(DATA, *(data+i));
-
-				/* if data is not ACK */
-				if (err != TW_MT_DATA_ACK)
-					/* exit */
-					i=lenght;
-			}
-
-		/* if client NACK on ADDR or DATA */
-		if ((err == TW_MT_SLA_NACK) || (err == TW_MT_DATA_NACK))
-			/* send the stop */
-			stop = TRUE;
-
-		/* if data is ACK */
-		if (err == TW_MT_DATA_ACK)
-			err = 0;
+	switch (code) {
+		/* valid also as restart */
+		case START:
+			TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);
+			loop_until_bit_is_set(TWCR, TWINT);
+			break;
+		case STOP:
+			TWCR = _BV(TWINT) | _BV(TWSTO) | _BV(TWEN);
+			break;
+		case SLA:
+		case DATA:
+			TWDR = data;
+			/* clear interrupt to start transmission */
+			TWCR = _BV(TWINT) | _BV(TWEN);
+			loop_until_bit_is_set(TWCR, TWINT);
+			break;
+		case ACK:
+			TWCR = _BV(TWINT) | _BV(TWEN) | _BV(TWEA);
+			loop_until_bit_is_set(TWCR, TWINT);
+			break;
+		case NACK:
+			TWCR = _BV(TWINT) | _BV(TWEN);
+			loop_until_bit_is_set(TWCR, TWINT);
+			break;
+		default:
+			break;
 	}
 
-	/* send the STOP if required */
-	if (stop)
-		i2c_send(STOP, 0);
-
-	return(err);
+	return(TW_STATUS);
 }
 
 /*! i2c Master Trasmitter Mode.
- *
- * Legacy mtm, now use mXm with addr LSB = write.
  *
  * \param addr the i2c slave address.
  * \param lenght the number of byte to send.
@@ -208,12 +120,46 @@ uint8_t i2c_mXm(const uint8_t addr, const uint16_t lenght,
 uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
-	return(i2c_mXm(addr, lenght, data, stop));
+	uint16_t i;
+	uint8_t err;
+
+	/* START */
+	err = i2c_send(START, 0);
+
+	// if start has been sent properly
+	if ((err == TW_START) || (err == TW_REP_START))
+		/* Send address */
+		err = i2c_send(SLA, addr);
+
+	/* if the address is ACK */
+	if (err == TW_MT_SLA_ACK)
+		/* send data */
+		for (i=0; i<lenght; i++) {
+			err = i2c_send(DATA, *(data+i));
+
+			/* if data is not ACK */
+			if (err != TW_MT_DATA_ACK)
+				/* exit */
+				i=lenght;
+		}
+
+	/* if client NACK on ADDR or DATA */
+	if ((err == TW_MT_SLA_NACK) || (err == TW_MT_DATA_NACK))
+		/* send the stop */
+		stop = TRUE;
+
+	/* if data is ACK */
+	if (err == TW_MT_DATA_ACK)
+		err = 0;
+
+	/* send the STOP if required */
+	if (stop)
+		i2c_send(STOP, 0);
+
+	return(err);
 }
 
 /*! i2c Master Receiver Mode.
- *
- * Legacy mrm, now use mXm with addr LSB = read.
  *
  * \param addr the i2c slave address.
  * \param the max lenght the number of byte to receive.
@@ -224,7 +170,56 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
-	return(i2c_mXm((addr | TW_READ), lenght, data, stop));
+	uint16_t i;
+	uint8_t err;
+
+	/* START */
+	err = i2c_send(START, 0);
+
+	// if start has been sent properly
+	if ((err == TW_START) || (err == TW_REP_START))
+		/* Send address */
+		err = i2c_send(SLA, addr);
+
+	/* if the address is ACK */
+	if (err == TW_MR_SLA_ACK)
+		/* Receive data */
+		for (i=0; i<lenght; i++) {
+			// Trigger the RX by sending ACK or NACK,
+			// if this is the last byte send NACK after it
+			// or send ACK.
+			if (i == (lenght - 1))
+				err = i2c_send(NACK, 0);
+			else
+				err = i2c_send(ACK, 0);
+
+			// Read the byte
+			*(data+i) = TWDR;
+
+			/* if data is not ACK */
+			if (err != TW_MR_DATA_ACK)
+				i = lenght;
+		}
+
+	/* Error NACK on ADDR-R or Last DATA */
+	if ((err == TW_MR_SLA_NACK) || (err == TW_MR_DATA_NACK))
+		/* send the stop */
+		stop = TRUE;
+
+	if (err == TW_MR_DATA_ACK) {
+		/* last byte, send NACK */
+		err = i2c_send(NACK, 0);
+
+		/* if data is NACK */
+		if (err == TW_MR_DATA_NACK)
+			err = 0;
+	}
+
+	/* send the STOP if required */
+	if (stop)
+		i2c_send(STOP, 0);
+
+	return(err);
 }
 
 /*! I2C General Call
@@ -248,6 +243,29 @@ uint8_t i2c_gc(const uint8_t call)
 }
 
 #ifdef I2C_LEGACY_MODE
+/*! i2c Master Trasmitter/Receive Mode.
+ *
+ * Dependent on the LSB of the address perform both
+ * the mtm/mrm functions.
+ *
+ * \param addr the i2c slave address.
+ * \param lenght the number of byte to send or
+ * the max lenght the number of byte to receive.
+ *
+ * \param *data the pointer to the block of byte.
+ * \param stop the stop at the end of the communication.
+ *
+ */
+uint8_t i2c_mXm(const uint8_t addr, const uint16_t lenght,
+		uint8_t *data, uint8_t stop)
+{
+	/* if read operation */
+	if (addr & TW_READ)
+		return(i2c_mrm(addr, lenght, data, stop));
+	else
+		return(i2c_mtm(addr, lenght, data, stop));
+}
+
 /*! Legacy master Send a byte.
  *
  * \param addr address of the slave.
