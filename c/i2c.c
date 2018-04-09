@@ -30,7 +30,10 @@
 
 /*! Initialize the i2c bus.
  *
- * See the datasheet for SCL speed.
+ * Setup the bus speed, depends on the hardware
+ * implementation, mcu and clock speed.
+ *
+ * For info on theese setup check the datasheet.
  * Prescaler value (1, 4, 16, 64)
  *
  * SCL freq = CPU FREQ / (16 + 2 * TWBR * Prescaler)
@@ -62,8 +65,6 @@ void i2c_init(void)
 #else
 #error I2C clock rate unsupported
 #endif
-
-	i2c_Bus_status = 0; // initialize the bus status.
 }
 
 /*! Shutdown the i2c bus.
@@ -239,7 +240,7 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
  * \param the max lenght the number of byte to receive.
  * \param *data the pointer to the block of byte.
  * \param stop the stop at the end of the communication.
- *
+ * \return 1 error, 0 ok
  */
 uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
@@ -294,6 +295,8 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 					else
 						/* status should become
 						 * TW_MR_DATA_NACK.
+						 * Instead it becomes
+						 * TW_NO_INFO !!!
 						 */
 						i2c_send(NACK, 0);
 
@@ -303,7 +306,8 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 				} else {
 					/* this should not be reached
 					 * if the last NACK set the
-					 * status to TW_MR_DATA_NACK.
+					 * status to TW_MR_DATA_NACK
+					 * TW_NO_INFO.
 					 */
 					run = FALSE;
 				}
@@ -311,6 +315,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 				break;
 
 			case TW_MR_DATA_NACK:
+			case TW_NO_INFO:
 				/* exit */
 				run = FALSE;
 				break;
@@ -336,9 +341,9 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 	if (stop)
 		i2c_send(STOP, 0);
 
-	/* if everything is ok */
-	if ((i2c_Bus_status == TW_MR_SLA_NACK)
-			|| (i2c_Bus_status == TW_MR_DATA_NACK))
+	/* Consider OK only TW_NO_INFO and TW_MR_DATA_NACK */
+	if ((i2c_Bus_status == TW_NO_INFO) ||
+			(i2c_Bus_status == TW_MR_DATA_NACK))
 		return(FALSE); // ok
 	else
 		return(TRUE);
