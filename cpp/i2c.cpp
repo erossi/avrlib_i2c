@@ -20,7 +20,7 @@
 #include <avr/io.h>
 #include "i2c.h"
 
-/* defines */
+// local defines
 #define START 1
 #define STOP 2
 #define SLA 3
@@ -54,12 +54,17 @@ uint8_t I2C::Bus_status {0}; //! Clear the bus status.
 void I2C::Init()
 {
 #if (F_CPU == 1000000UL)
-	/* Prescaler 1 */
-	TWSR = 0;
+	// Fscl = F_CPU/(16 + 2*TWBR*(4^Prescaler))
+	// 2.840909091 Khz
+	TWSR = 0; // Prescaler 1
 	TWBR = 42;
+#elif (F_CPU == 8000000UL)
+	// .9746588693 Khz
+	TWSR |= _BV(TWPS0); // Prescaler 4
+	TWBR = 16;
 #elif (F_CPU == 16000000UL)
-	/* Prescaler 8 */
-	TWSR |= _BV(TWPS0);
+	// 0.3155569580 Khz
+	TWSR |= _BV(TWPS0); // Prescaler 4
 	TWBR = 99;
 #else
 #error I2C clock rate unsupported
