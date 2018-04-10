@@ -42,7 +42,6 @@ class I2C {
 	public:
 		I2C(uint8_t); //! \brief Register a device with i2c address.
 		~I2C(); //! \brief de-register a device.
-		static uint8_t BusError() { return(Bus_status); }; //! \deprecated
 		static uint8_t BusStatus() { return(Bus_status); }; //! Global I2C bus
 		uint8_t error() { return(error_); };
 		void mtm(const uint16_t, uint8_t*, bool = true);
