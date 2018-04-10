@@ -157,8 +157,8 @@ void I2C::send(const uint8_t code, const uint8_t data)
  * To send a write command (ex. to load a register), then a read
  * to get the result use:
  *
- * i2c_mtm(a, 1, d, FALSE);
- * i2c_mrm(a, 1, d, TRUE);
+ * i2c_mtm(a, 1, d, false);
+ * i2c_mrm(a, 1, d, true);
  *
  * on the MRM the start will be considered a REP-START and should
  * generate a TW_REP_START as a result.
@@ -180,46 +180,91 @@ void I2C::send(const uint8_t code, const uint8_t data)
  * \param lenght the number of byte to send.
  * \param *data the pointer to the block of byte.
  * \param stop send the stop at the end of the communication
- * default to TRUE.
+ * default to true.
  */
-void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
+void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
 {
-	error_ = 0; // Clear errors
-	send(START, 0); // START
+	uint16_t i {0};
+	bool run {true};
 
-	// if start acknoledge
-	if ((I2C::Bus_status == TW_START) || (I2C::Bus_status == TW_REP_START))
-		send(SLA, (address | TW_WRITE)); // Send WRITE address
-	else
-		error_ |= (1 << I2C_ERR_BUS); // Something wrong with the bus.
+	/* Send the start.
+	 * Results:
+	 * TW_START
+	 * TW_REP_START in case this was a restart.
+	 */
+	send(START); // START
 
-	// if the address is ACK
-	if (I2C::Bus_status == TW_MT_SLA_ACK)
-		// send data
-		for (uint16_t i=0; i<lenght; i++) {
-			send(DATA, *(data+i));
+	do {
+		switch (I2C::Bus_status) {
+			case TW_START:
+			case TW_REP_START:
+				/* Send address.
+				 * Results:
+				 * TW_MT_SLA_ACK,
+				 * TW_MT_SLA_NACK,
+				 * TW_MR_ARB_LOST,
+				 * TW_SR_ARB_LOST_SLA_ACK,
+				 * TW_SR_ARB_LOST_GCALL_ACK,
+				 * TW_ST_ARB_LOST_SLA_ACK
+				 */
+				send(SLA, address);
+				break;
 
-			// if data is not ACK
-			if (I2C::Bus_status != TW_MT_DATA_ACK) {
-				error_ |= (1 << I2C_ERR_DATA);
-				i = lenght; // exit
-			}
+				/* note that the implementation
+				 * of the TW_MT_SLA_ACK is the
+				 * same of TW_MT_DATA_ACK.
+				 * Removed duplication of code.
+				 */
+			case TW_MT_SLA_ACK:
+			case TW_MT_DATA_ACK:
+				/* send data if present (should be).
+				 * Results:
+				 * TW_MT_DATA_ACK
+				 * TW_MT_DATA_NACK
+				 */
+				if (i < lenght) {
+					send(DATA, *(data+i));
+					i++;
+				} else {
+					run = false;
+				}
+
+				break;
+
+			case TW_MT_SLA_NACK:
+			case TW_MT_DATA_NACK:
+				/* exit.
+				 * by forcing a STOP, a RE-START
+				 * from error conditions cannot be
+				 * performed. If a device generate
+				 * a NACK to indicate wait and it
+				 * need a restart sequence this part of
+				 * the code need to be changed.
+				 */
+				/* code de-duplication */
+			default:
+				/* unmanaged situation,
+				 * send STOP and exit:
+				 * Apply to:
+				 * TW_BUS_ERROR (0x00)
+				 */
+				stop = true;
+				run = false;
 		}
-	else
-		error_ = (1 << I2C_ERR_NOTFOUND); // Device not responding.
-
-	// if client NACK on ADDR or DATA
-	if ((I2C::Bus_status == TW_MT_SLA_NACK) ||
-			(I2C::Bus_status == TW_MT_DATA_NACK))
-		stop = true; // send the stop
-
-	// if data is ACK
-	if (I2C::Bus_status == TW_MT_DATA_ACK)
-		I2C::Bus_status = 0; // Everything is ok
+	} while (run);
 
 	/* send the STOP if required */
 	if (stop)
-		send(STOP, 0);
+		send(STOP);
+
+	/* if everything is ok, assuming the only two
+	 * conditions are the ACK results.
+	 */
+	if ((I2C::Bus_status == TW_MT_SLA_ACK) ||
+			(I2C::Bus_status == TW_MT_DATA_ACK))
+		error_ = false;
+	else
+		error_ = true;
 }
 
 /*! i2c Master Receiver Mode.
@@ -228,55 +273,109 @@ void I2C::tx(const uint16_t lenght, uint8_t *data, bool stop)
  *
  * \param *data the pointer to the block of byte.
  * \param stop send the stop at the end of the communication
- * default to TRUE.
+ * default to true.
  *
  * \missing complete error handling.
  */
-void I2C::rx(const uint16_t lenght, uint8_t *data, bool stop)
+void I2C::mrm(const uint16_t lenght, uint8_t *data, bool stop)
 {
-	// Clear errors
-	error_ = 0;
+	uint16_t i {0};
+	bool run {true};
 
-	// START
-	send(START, 0);
+	/* Send the start.
+	 * Results:
+	 * TW_START
+	 * TW_REP_START in case this was a restart.
+	 */
+	send(START);
 
-	// if start acknoledge
-	if ((I2C::Bus_status == TW_START) || (I2C::Bus_status == TW_REP_START))
-		send(SLA, (address | TW_READ)); // Send READ address
-	else
-		error_ |= (1 << I2C_ERR_BUS); // Something wrong with the bus.
+	do {
+		switch (I2C::Bus_status) {
+			case TW_START:
+			case TW_REP_START:
+				/* Send address + R.
+				 * Results:
+				 * TW_MR_SLA_ACK
+				 * TW_MR_SLA_NACK
+				 * TW_MT_ARB_LOST
+				 * TW_SR_ARB_LOST_SLA_ACK
+				 * TW_SR_ARB_LOST_GCALL_ACK
+				 * TW_ST_ARB_LOST_SLA_ACK
+				 */
+				send(SLA, (address | TW_READ));
+				break;
 
-	// if the address is ACK
-	if (I2C::Bus_status == TW_MR_SLA_ACK)
-		// Receive data
-		for (uint16_t i=0; i<lenght; i++) {
-			send(ACK, 0); // send ACK
+			case TW_MR_SLA_ACK:
+			case TW_MR_DATA_ACK:
+				/* Receive data.
+				 *
+				 * data reception is triggered by sending
+				 * an ACK or NACK, depending if this is the
+				 * last byte to be received or not.
+				 *
+				 * Results generated by us:
+				 * TW_MR_DATA_ACK
+				 * TW_MR_DATA_NACK
+				 */
+				if (i < lenght) {
+					if (i < (lenght - 1))
+						/* status should remain
+						 * TW_MR_DATA_ACK
+						 */
+						send(ACK);
+					else
+						/* status should become
+						 * TW_MR_DATA_NACK.
+						 * Instead it becomes
+						 * TW_NO_INFO !!!
+						 */
+						send(NACK);
 
-			// if RX data is ACK
-			if (I2C::Bus_status == TW_MR_DATA_ACK) {
-				*(data+i) = TWDR; // fetch it
-			} else {
-				error_ |= (1 << I2C_ERR_DATA);
-				i = lenght; // exit
-			}
+					// Read the byte
+					*(data+i) = TWDR;
+					i++;
+				} else {
+					/* this should not be reached
+					 * if the last NACK set the
+					 * status to TW_MR_DATA_NACK
+					 * TW_NO_INFO.
+					 */
+					run = false;
+				}
+
+				break;
+
+			case TW_MR_DATA_NACK:
+			case TW_NO_INFO:
+				/* exit */
+				run = false;
+				break;
+
+			case TW_MR_SLA_NACK:
+				/* force exit without managing
+				 * a re-start condition.
+				 * see MT_SLA_NACK.
+				 */
+				/* code de-duplication */
+			default:
+				/* unmanaged situation,
+				 * send STOP and exit:
+				 * Apply to:
+				 * TW_BUS_ERROR (0x00)
+				 */
+				stop = true;
+				run = false;
 		}
-	else
-		error_ = (1 << I2C_ERR_NOTFOUND); // Device not responding.
-
-	// Error NACK on ADDR-R or Last DATA
-	if ((I2C::Bus_status == TW_MR_SLA_NACK) ||
-			(I2C::Bus_status == TW_MR_DATA_NACK))
-		stop = true; // send the stop
-
-	if (I2C::Bus_status == TW_MR_DATA_ACK) {
-		send(NACK, 0); // last byte, send NACK
-
-		// if data is NACK
-		if (I2C::Bus_status == TW_MR_DATA_NACK)
-			I2C::Bus_status = 0; // Everything is ok
-	}
+	} while (run);
 
 	/* send the STOP if required */
 	if (stop)
-		send(STOP, 0);
+		send(STOP);
+
+	/* Consider OK only TW_NO_INFO and TW_MR_DATA_NACK */
+	if ((I2C::Bus_status == TW_NO_INFO) ||
+			(I2C::Bus_status == TW_MR_DATA_NACK))
+		error_ = false;
+	else
+		error_ = true;
 }

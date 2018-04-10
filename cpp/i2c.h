@@ -29,19 +29,14 @@
 #define I2C_GC_RESET 0
 #define I2C_TIMEOUT 0xff
 
-// object errors
-#define I2C_ERR_BUS 0 //! Bus error.
-#define I2C_ERR_NOTFOUND 1 //! Device not found.
-#define I2C_ERR_DATA 2 //! Data error.
-
 class I2C {
 	private:
 		// I2C bus should be initialized only once
 		static uint8_t Registered; //! \brief Devices registered on the bus
 		static uint8_t Bus_status; //! \biref Global Bus error common to all devices.
-		uint8_t error_; //! Local error to a single device.
+		bool error_; //! Local error to a single device.
 		const uint8_t address; // device's address
-		static void send(const uint8_t, const uint8_t);
+		static void send(const uint8_t, const uint8_t = 0);
 		static void Init(); // Initialize bus
 		static void Shut(); // De-initialize bus
 	public:
@@ -50,8 +45,8 @@ class I2C {
 		static uint8_t BusError() { return(Bus_status); }; //! \deprecated
 		static uint8_t BusStatus() { return(Bus_status); }; //! Global I2C bus
 		uint8_t error() { return(error_); };
-		void tx(const uint16_t, uint8_t*, bool = true);
-		void rx(const uint16_t, uint8_t*, bool = true);
+		void mtm(const uint16_t, uint8_t*, bool = true);
+		void mrm(const uint16_t, uint8_t*, bool = true);
 };
 
 #endif
