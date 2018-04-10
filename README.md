@@ -28,3 +28,6 @@ where:
  * byte - bytes to receive
  * address_space - \*ptr to the data to be received.
  * stop - send the stop bit (default=true, false)
+
+### Example compiling C++ code:
+avr-g++ -Wall -pedantic -std=c++11 -mmcu=atmega1284p -O2 -D F_CPU=1000000UL -c i2c.cpp

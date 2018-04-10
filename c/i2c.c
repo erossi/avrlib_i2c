@@ -83,7 +83,7 @@ void i2c_shut(void)
  * \param code I2C operation do be performed.
  * \param data data to be sent.
  */
-void i2c_send(const uint8_t code, const uint8_t data)
+void send(const uint8_t code, const uint8_t data)
 {
 	switch (code) {
 		/* valid also as RESTART */
@@ -123,8 +123,8 @@ void i2c_send(const uint8_t code, const uint8_t data)
  * To send a write command (ex. to load a register), then a read
  * to get the result use:
  *
- * i2c_mtm(a, 1, d, FALSE);
- * i2c_mrm(a, 1, d, TRUE);
+ * i2c_mtm(a, 1, d, false);
+ * i2c_mrm(a, 1, d, true);
  *
  * on the MRM the start will be considered a REP-START and should
  * generate a TW_REP_START as a result.
@@ -142,13 +142,13 @@ void i2c_send(const uint8_t code, const uint8_t data)
  * \warning in case of NACK, if stop was not forseen,
  * the NO stop is generated.
  *
- * \param addr the i2c slave address.
+ * \param address the i2c slave address.
  * \param lenght the number of byte to send.
  * \param *data the pointer to the block of byte.
  * \param stop the stop at the end of the communication.
  * \return TRUE: error, FALSE: ok.
  */
-uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
+uint8_t i2c_mtm(const uint8_t address, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
 	uint16_t i;
@@ -162,7 +162,7 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 	 * TW_START
 	 * TW_REP_START in case this was a restart.
 	 */
-	i2c_send(START, 0);
+	send(START, 0);
 
 	do {
 		switch (i2c_Bus_status) {
@@ -177,7 +177,7 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 				 * TW_SR_ARB_LOST_GCALL_ACK,
 				 * TW_ST_ARB_LOST_SLA_ACK
 				 */
-				i2c_send(SLA, addr);
+				send(SLA, address);
 				break;
 
 				/* note that the implementation
@@ -193,7 +193,7 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 				 * TW_MT_DATA_NACK
 				 */
 				if (i < lenght) {
-					i2c_send(DATA, *(data+i));
+					send(DATA, *(data+i));
 					i++;
 				} else {
 					run = FALSE;
@@ -225,7 +225,7 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
 
 	/* send the STOP if required */
 	if (stop)
-		i2c_send(STOP, 0);
+		send(STOP, 0);
 
 	/* if everything is ok, assuming the only two
 	 * conditions are the ACK results.
@@ -241,13 +241,13 @@ uint8_t i2c_mtm(const uint8_t addr, const uint16_t lenght,
  *
  * \see i2c_mtm
  *
- * \param addr the i2c slave address.
+ * \param address the i2c slave address.
  * \param the max lenght the number of byte to receive.
  * \param *data the pointer to the block of byte.
  * \param stop the stop at the end of the communication.
  * \return 1 error, 0 ok
  */
-uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
+uint8_t i2c_mrm(const uint8_t address, const uint16_t lenght,
 		uint8_t *data, uint8_t stop)
 {
 	uint16_t i;
@@ -261,7 +261,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 	 * TW_START
 	 * TW_REP_START in case this was a restart.
 	 */
-	i2c_send(START, 0);
+	send(START, 0);
 
 	do {
 		switch (i2c_Bus_status) {
@@ -276,7 +276,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 				 * TW_SR_ARB_LOST_GCALL_ACK
 				 * TW_ST_ARB_LOST_SLA_ACK
 				 */
-				i2c_send(SLA, (addr | TW_READ));
+				send(SLA, (address | TW_READ));
 				break;
 
 			case TW_MR_SLA_ACK:
@@ -296,14 +296,14 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 						/* status should remain
 						 * TW_MR_DATA_ACK
 						 */
-						i2c_send(ACK, 0);
+						send(ACK, 0);
 					else
 						/* status should become
 						 * TW_MR_DATA_NACK.
 						 * Instead it becomes
 						 * TW_NO_INFO !!!
 						 */
-						i2c_send(NACK, 0);
+						send(NACK, 0);
 
 					// Read the byte
 					*(data+i) = TWDR;
@@ -344,7 +344,7 @@ uint8_t i2c_mrm(const uint8_t addr, const uint16_t lenght,
 
 	/* send the STOP if required */
 	if (stop)
-		i2c_send(STOP, 0);
+		send(STOP, 0);
 
 	/* Consider OK only TW_NO_INFO and TW_MR_DATA_NACK */
 	if ((i2c_Bus_status == TW_NO_INFO) ||
