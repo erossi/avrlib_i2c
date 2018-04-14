@@ -40,6 +40,8 @@ uint8_t i2c_Bus_status;
 
 void i2c_init(void);
 void i2c_shut(void);
+uint8_t i2c_mXm(const uint8_t address, const uint16_t lenght,
+		uint8_t *data, const uint8_t stop);
 uint8_t i2c_mtm(const uint8_t address, const uint16_t lenght,
 		uint8_t *data, const uint8_t stop);
 uint8_t i2c_mrm(const uint8_t address, const uint16_t lenght,
