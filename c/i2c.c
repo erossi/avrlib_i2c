@@ -231,7 +231,8 @@ uint8_t i2c_mtm(const uint8_t address, const uint16_t lenght,
 	 * conditions are the ACK results.
 	 */
 	if ((i2c_Bus_status == TW_MT_SLA_ACK) ||
-			(i2c_Bus_status == TW_MT_DATA_ACK))
+			(i2c_Bus_status == TW_MT_DATA_ACK) ||
+			(i2c_Bus_status == TW_NO_INFO))
 		return(FALSE); // ok
 	else
 		return(TRUE);
