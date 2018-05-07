@@ -150,10 +150,11 @@ void I2C::send(const uint8_t code, const uint8_t data)
 	I2C::Bus_status = TW_STATUS;
 }
 
-/*! i2c Master Trasmitter Mode.
+/*! i2c Master Mode.
  *
  * Send the data to I2C client, following the diagram in
- * the datasheet.
+ * the datasheet for both the Trasmitter and Receiver mode.
+ *
  * To send a write command (ex. to load a register), then a read
  * to get the result use:
  *
@@ -167,7 +168,7 @@ void I2C::send(const uint8_t code, const uint8_t data)
  *   - multi-master
  *   - TW_MT_SLA_NACK with sending data anyway.
  *
- * Successful result is considered only those which results with
+ * Successful result is considered:
  * SLA_ACK or DATA_ACK.
  *
  * \note: Re-start is equal to start, but with a different
@@ -176,13 +177,12 @@ void I2C::send(const uint8_t code, const uint8_t data)
  * \warning in case of NACK, if stop was not forseen,
  * the NO stop is generated.
  *
- * \param addr the i2c slave address.
  * \param lenght the number of byte to send.
  * \param *data the pointer to the block of byte.
- * \param stop send the stop at the end of the communication
- * default to true.
+ * \param stop send the stop at the end of the communication.
+ * \param tw_read I2C read/write, true = read.
  */
-void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
+void I2C::mXm(const uint16_t lenght, uint8_t *data, bool stop, bool tw_read)
 {
 	uint16_t i {0};
 	bool run {true};
@@ -198,7 +198,7 @@ void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
 		switch (I2C::Bus_status) {
 			case TW_START:
 			case TW_REP_START:
-				/* Send address.
+				/* Send address + W.
 				 * Results:
 				 * TW_MT_SLA_ACK,
 				 * TW_MT_SLA_NACK,
@@ -206,8 +206,17 @@ void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
 				 * TW_SR_ARB_LOST_SLA_ACK,
 				 * TW_SR_ARB_LOST_GCALL_ACK,
 				 * TW_ST_ARB_LOST_SLA_ACK
+				 *
+				 * Send address + R.
+				 * Results:
+				 * TW_MR_SLA_ACK
+				 * TW_MR_SLA_NACK
+				 * TW_MT_ARB_LOST
+				 * TW_SR_ARB_LOST_SLA_ACK
+				 * TW_SR_ARB_LOST_GCALL_ACK
+				 * TW_ST_ARB_LOST_SLA_ACK
 				 */
-				send(SLA, address);
+				send(SLA, (address | tw_read));
 				break;
 
 				/* note that the implementation
@@ -229,80 +238,6 @@ void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
 					run = false;
 				}
 
-				break;
-
-			case TW_MT_SLA_NACK:
-			case TW_MT_DATA_NACK:
-				/* exit.
-				 * by forcing a STOP, a RE-START
-				 * from error conditions cannot be
-				 * performed. If a device generate
-				 * a NACK to indicate wait and it
-				 * need a restart sequence this part of
-				 * the code need to be changed.
-				 */
-				/* code de-duplication */
-			default:
-				/* unmanaged situation,
-				 * send STOP and exit:
-				 * Apply to:
-				 * TW_BUS_ERROR (0x00)
-				 */
-				stop = true;
-				run = false;
-		}
-	} while (run);
-
-	/* send the STOP if required */
-	if (stop)
-		send(STOP);
-
-	/* if everything is ok, assuming the only two
-	 * conditions are the ACK results.
-	 */
-	if ((I2C::Bus_status == TW_MT_SLA_ACK) ||
-			(I2C::Bus_status == TW_MT_DATA_ACK))
-		error_ = false;
-	else
-		error_ = true;
-}
-
-/*! i2c Master Receiver Mode.
- *
- * \see i2c_mtm
- *
- * \param *data the pointer to the block of byte.
- * \param stop send the stop at the end of the communication
- * default to true.
- *
- * \missing complete error handling.
- */
-void I2C::mrm(const uint16_t lenght, uint8_t *data, bool stop)
-{
-	uint16_t i {0};
-	bool run {true};
-
-	/* Send the start.
-	 * Results:
-	 * TW_START
-	 * TW_REP_START in case this was a restart.
-	 */
-	send(START);
-
-	do {
-		switch (I2C::Bus_status) {
-			case TW_START:
-			case TW_REP_START:
-				/* Send address + R.
-				 * Results:
-				 * TW_MR_SLA_ACK
-				 * TW_MR_SLA_NACK
-				 * TW_MT_ARB_LOST
-				 * TW_SR_ARB_LOST_SLA_ACK
-				 * TW_SR_ARB_LOST_GCALL_ACK
-				 * TW_ST_ARB_LOST_SLA_ACK
-				 */
-				send(SLA, (address | TW_READ));
 				break;
 
 			case TW_MR_SLA_ACK:
@@ -351,12 +286,25 @@ void I2C::mrm(const uint16_t lenght, uint8_t *data, bool stop)
 				run = false;
 				break;
 
+			case TW_MT_SLA_NACK:
+			case TW_MT_DATA_NACK:
+				/* exit.
+				 * by forcing a STOP, a RE-START
+				 * from error conditions cannot be
+				 * performed. If a device generate
+				 * a NACK to indicate wait and it
+				 * need a restart sequence this part of
+				 * the code need to be changed.
+				 */
+				/* code de-duplication */
+
 			case TW_MR_SLA_NACK:
 				/* force exit without managing
 				 * a re-start condition.
 				 * see MT_SLA_NACK.
 				 */
 				/* code de-duplication */
+
 			default:
 				/* unmanaged situation,
 				 * send STOP and exit:
@@ -372,10 +320,40 @@ void I2C::mrm(const uint16_t lenght, uint8_t *data, bool stop)
 	if (stop)
 		send(STOP);
 
-	/* Consider OK only TW_NO_INFO and TW_MR_DATA_NACK */
-	if ((I2C::Bus_status == TW_NO_INFO) ||
-			(I2C::Bus_status == TW_MR_DATA_NACK))
+	/* if everything is ok, assuming the only two
+	 * conditions are the ACK results.
+	 */
+	if ((I2C::Bus_status == TW_MT_SLA_ACK) ||
+			(I2C::Bus_status == TW_MT_DATA_ACK) ||
+			(I2C::Bus_status == TW_MR_DATA_NACK) ||
+			(I2C::Bus_status == TW_NO_INFO))
 		error_ = false;
 	else
 		error_ = true;
+}
+
+/*! i2c Master Transmitter Mode.
+ *
+ * \see I2C::mXm
+ *
+ * \param lenght the max lenght the number of byte to receive.
+ * \param *data the pointer to the block of byte.
+ * \param stop the stop at the end of the communication.
+ */
+void I2C::mtm(const uint16_t lenght, uint8_t *data, bool stop)
+{
+	mXm(lenght, data, stop, false);
+}
+
+/*! i2c Master Receiver Mode.
+ *
+ * \see I2C::mXm
+ *
+ * \param the max lenght the number of byte to receive.
+ * \param *data the pointer to the block of byte.
+ * \param stop the stop at the end of the communication.
+ */
+void I2C::mrm(const uint16_t lenght, uint8_t *data, bool stop)
+{
+	mXm(lenght, data, stop, true);
 }

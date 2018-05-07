@@ -39,6 +39,7 @@ class I2C {
 		static void send(const uint8_t, const uint8_t = 0);
 		static void Init(); // Initialize bus
 		static void Shut(); // De-initialize bus
+		void mXm(const uint16_t, uint8_t*, bool, bool);
 	public:
 		I2C(uint8_t); //! \brief Register a device with i2c address.
 		~I2C(); //! \brief de-register a device.
