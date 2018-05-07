@@ -303,7 +303,7 @@ uint8_t i2c_mXm(const uint8_t address, const uint16_t lenght,
 		return(TRUE);
 }
 
-/*! i2c Master Trasmitter Mode.
+/*! i2c Master Transmitter Mode.
  *
  * \see i2c_mXm
  *
