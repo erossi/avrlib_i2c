@@ -27,21 +27,21 @@
 
 // common defs
 #define I2C_GC_RESET 0
-#define I2C_TIMEOUT 0xff
 
 class I2C {
 	private:
 		// I2C bus should be initialized only once
 		static uint8_t Registered; //! \brief Devices registered on the bus
 		static uint8_t Bus_status; //! \biref Global Bus error common to all devices.
-		bool error_; //! Local error to a single device.
-		const uint8_t address; // device's address
-		static void send(const uint8_t, const uint8_t = 0);
 		static void Init(); // Initialize bus
 		static void Shut(); // De-initialize bus
+		bool error_; //! Local error to a single device.
+		const uint8_t address; // device's address
+		void send(const uint8_t, const uint8_t = 0);
 		void mXm(const uint16_t, uint8_t*, bool, bool);
 	public:
-		I2C(uint8_t); //! \brief Register a device with i2c address.
+		uint16_t timeout { 0 }; // in msec.
+		I2C(uint8_t, uint16_t = 0); //! \brief Register a device with i2c address.
 		~I2C(); //! \brief de-register a device.
 		static uint8_t BusStatus() { return(Bus_status); }; //! Global I2C bus
 		uint8_t error() { return(error_); };

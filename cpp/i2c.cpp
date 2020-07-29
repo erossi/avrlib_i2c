@@ -16,6 +16,7 @@
  */
 
 #include <stdint.h>
+#include <util/delay.h>
 #include <util/twi.h>
 #include <avr/io.h>
 #include "i2c.h"
@@ -85,8 +86,11 @@ void I2C::Shut()
  * and do it.
  *
  * \note C++11 set the const addr to address.
+ * \param addr the address of the device
+ * \param timeout msec non-block timeout, default 0 = block
+ * until the operation is completed.
  */
-I2C::I2C(uint8_t addr) : address{addr}
+I2C::I2C(uint8_t addr, uint16_t t) : address{addr}, timeout{t}
 {
 	if (!I2C::Registered)
 		I2C::Init();
@@ -119,11 +123,19 @@ I2C::~I2C()
  */
 void I2C::send(const uint8_t code, const uint8_t data)
 {
+	uint16_t i { timeout };
+
 	switch (code) {
 		/* valid also as RESTART */
 		case START:
 			TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);
-			loop_until_bit_is_set(TWCR, TWINT);
+
+			if (i)
+				while (i-- && bit_is_clear(TWCR, TWINT))
+					_delay_ms(1);
+			else
+				loop_until_bit_is_set(TWCR, TWINT);
+
 			break;
 		case STOP:
 			TWCR = _BV(TWINT) | _BV(TWSTO) | _BV(TWEN);
@@ -133,15 +145,33 @@ void I2C::send(const uint8_t code, const uint8_t data)
 			TWDR = data;
 			/* clear interrupt to start transmission */
 			TWCR = _BV(TWINT) | _BV(TWEN);
-			loop_until_bit_is_set(TWCR, TWINT);
+
+			if (i)
+				while (i-- && bit_is_clear(TWCR, TWINT))
+					_delay_ms(1);
+			else
+				loop_until_bit_is_set(TWCR, TWINT);
+
 			break;
 		case ACK:
 			TWCR = _BV(TWINT) | _BV(TWEN) | _BV(TWEA);
-			loop_until_bit_is_set(TWCR, TWINT);
+
+			if (i)
+				while (i-- && bit_is_clear(TWCR, TWINT))
+					_delay_ms(1);
+			else
+				loop_until_bit_is_set(TWCR, TWINT);
+
 			break;
 		case NACK:
 			TWCR = _BV(TWINT) | _BV(TWEN);
-			loop_until_bit_is_set(TWCR, TWINT);
+
+			if (i)
+				while (i-- && bit_is_clear(TWCR, TWINT))
+					_delay_ms(1);
+			else
+				loop_until_bit_is_set(TWCR, TWINT);
+
 			break;
 		default:
 			break;
